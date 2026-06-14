@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PhoneRecon — FUTMinna OSINT Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<!-- Leaflet map -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #080c10;
+  --surface: #0f1620;
+  --card:    #111c28;
+  --border:  #1a2d42;
+  --accent:  #00c8f8;
+  --green:   #00e5a0;
+  --red:     #ff4d6a;
+  --amber:   #ffb830;
+  --purple:  #a78bfa;
+  --text:    #c5d8ea;
+  --muted:   #3d5a72;
+  --mono:    'Share Tech Mono', monospace;
+  --sans:    'DM Sans', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  padding-bottom: 5rem;
+}
+
+/* ── Topbar ── */
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0.9rem 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.logo { font-family: var(--mono); font-size: 1rem; color: var(--accent); letter-spacing: 0.1em; }
+.logo span { color: var(--green); }
+.tagline { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-left: auto; }
+
+/* ── Layout ── */
+.container { max-width: 900px; margin: 0 auto; padding: 2rem 1.2rem; }
+
+/* ── Card ── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.2rem;
+}
+.card-label {
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  margin-bottom: 1rem;
+}
+
+/* ── Inputs ── */
+label.field-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.input-row { display: flex; gap: 0.6rem; margin-bottom: 0.75rem; }
+input[type="text"], input[type="password"] {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  padding: 0.65rem 0.9rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+input:focus { border-color: var(--accent); }
+.hint { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); line-height: 1.6; }
+
+/* ── Button ── */
+.btn {
+  background: transparent;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  padding: 0.65rem 1.4rem;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.btn:hover    { background: var(--accent); color: var(--bg); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ── Spinner ── */
+#spinner {
+  display: none;
+  width: 18px; height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  margin: 1.2rem auto 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Error ── */
+#errorBox {
+  display: none;
+  background: rgba(255,77,106,0.08);
+  border: 1px solid rgba(255,77,106,0.3);
+  border-radius: 5px;
+  padding: 0.75rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--red);
+  margin-top: 0.8rem;
+}
+
+/* ── Results ── */
+#results { display: none; }
+
+.result-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-bottom: 1.3rem;
+}
+.badge {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.badge-valid   { background: rgba(0,229,160,0.1);  color: var(--green);  border: 1px solid rgba(0,229,160,0.3); }
+.badge-invalid { background: rgba(255,77,106,0.1); color: var(--red);    border: 1px solid rgba(255,77,106,0.3); }
+.badge-live    { background: rgba(0,200,248,0.1);  color: var(--accent); border: 1px solid rgba(0,200,248,0.3); }
+.badge-geo     { background: rgba(167,139,250,0.1);color: var(--purple); border: 1px solid rgba(167,139,250,0.3); }
+
+.phone-title { font-family: var(--mono); font-size: 1.15rem; color: var(--accent); }
+.ts { font-family: var(--mono); font-size: 0.63rem; color: var(--muted); margin-left: auto; }
+
+.section-title {
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Data grid ── */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1.2rem;
+}
+.field {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.7rem 0.85rem;
+}
+.field-key {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.25rem;
+}
+.field-val {
+  font-family: var(--mono);
+  font-size: 0.86rem;
+  color: var(--text);
+  word-break: break-all;
+}
+.field-val.hi-green  { color: var(--green); }
+.field-val.hi-blue   { color: var(--accent); }
+.field-val.hi-purple { color: var(--purple); }
+.source-tag { font-family: var(--mono); font-size: 0.58rem; color: var(--muted); display: block; margin-top: 0.12rem; }
+
+/* ── Geo section ── */
+.geo-layout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 1rem;
+  margin-bottom: 1.2rem;
+}
+@media (max-width: 640px) { .geo-layout { grid-template-columns: 1fr; } }
+
+#map {
+  height: 220px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: #0a1520;
+  order: 2;
+}
+@media (max-width: 640px) { #map { order: -1; } }
+
+/* Custom Leaflet dark tiles override */
+.leaflet-tile-pane { filter: brightness(0.7) saturate(0.6) hue-rotate(180deg); }
+.leaflet-container { background: #0a1520; }
+
+.geo-fields { display: flex; flex-direction: column; gap: 0.55rem; }
+
+/* ── Local time ── */
+.tz-row {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.7rem 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.tz-name  { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.tz-time  { font-family: var(--mono); font-size: 1rem; color: var(--green); letter-spacing: 0.05em; }
+.tz-date  { font-family: var(--mono); font-size: 0.65rem; color: var(--text); }
+
+/* ── OSINT links ── */
+.osint-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 0.55rem;
+}
+.osint-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.6rem 0.8rem;
+  text-decoration: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+.osint-link:hover { border-color: var(--accent); background: rgba(0,200,248,0.04); }
+.osint-icon { font-size: 1rem; }
+.osint-name { font-family: var(--mono); font-size: 0.73rem; color: var(--text); }
+
+/* ── Warn box ── */
+.warn-box {
+  background: rgba(255,184,48,0.06);
+  border: 1px solid rgba(255,184,48,0.2);
+  border-radius: 5px;
+  padding: 0.55rem 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--amber);
+  margin-bottom: 1rem;
+}
+
+/* ── Footer ── */
+.footer {
+  max-width: 900px;
+  margin: 2rem auto 0;
+  padding: 1rem 1.2rem 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  color: var(--muted);
+  line-height: 1.9;
+}
+
+/* scan line */
+.scanline {
+  position: fixed; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, var(--accent) 50%, transparent 100%);
+  opacity: 0;
+  animation: scan 4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes scan {
+  0%   { top: 0;     opacity: 0;   }
+  10%  { opacity: 0.5; }
+  90%  { opacity: 0.3; }
+  100% { top: 100vh; opacity: 0;   }
+}
+
+/* Timezones pill row */
+.tz-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.2rem; }
+
+@media (max-width: 520px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+  .ts   { display: none; }
+}
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+
+<div class="topbar">
+  <div class="logo">Phone<span>Recon</span></div>
+  <div class="tagline">// FUTMinna Cybersecurity · OSINT Phone Intelligence · Educational Use Only</div>
+</div>
+
+<div class="container">
+
+  <!-- Config -->
+  <div class="card">
+    <div class="card-label">// API Configuration</div>
+
+    <label class="field-label" for="apiKey">AbstractAPI Key — live carrier data (optional)</label>
+    <div class="input-row" style="margin-bottom:0.4rem;">
+      <input type="password" id="apiKey" placeholder="abstractapi.com/api/phone-validation — free 250/month" />
+    </div>
+
+    <label class="field-label" for="opencageKey" style="margin-top:0.9rem;">OpenCage Key — precise geolocation (optional)</label>
+    <div class="input-row" style="margin-bottom:0.4rem;">
+      <input type="password" id="opencageKey" placeholder="opencagedata.com — free 2500/day" />
+    </div>
+    <p class="hint">// Without keys, offline analysis + country-level map pin still work via open data.</p>
+  </div>
+
+  <!-- Target -->
+  <div class="card">
+    <div class="card-label">// Target Acquisition</div>
+    <label class="field-label" for="phoneInput">Phone Number — E.164 format with country code</label>
+    <div class="input-row">
+      <input type="text" id="phoneInput" placeholder="+2348012345678" autocomplete="off" />
+      <button class="btn" id="lookupBtn" onclick="runLookup()">▶ SCAN</button>
+    </div>
+    <p class="hint">// +2348012345678 (Nigeria) · +12025550100 (US) · +447911123456 (UK)</p>
+    <div id="spinner"></div>
+    <div id="errorBox"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results">
+
+    <!-- Identity card -->
+    <div class="card">
+      <div class="result-header">
+        <div id="validBadge" class="badge"></div>
+        <div id="liveTag"    class="badge" style="display:none;"></div>
+        <div id="geoTag"     class="badge" style="display:none;"></div>
+        <div class="phone-title" id="phoneTitle"></div>
+        <div class="ts" id="timestamp"></div>
+      </div>
+
+      <div id="liveWarn" class="warn-box" style="display:none;"></div>
+
+      <div class="section-title">Number Formats</div>
+      <div class="grid" id="gridFormats"></div>
+
+      <div class="section-title">Identity Intelligence</div>
+      <div class="grid" id="gridIdentity"></div>
+    </div>
+
+    <!-- Geolocation card -->
+    <div class="card" id="geoCard" style="display:none;">
+      <div class="card-label">// Geolocation Intelligence</div>
+      <div id="geoWarn" class="warn-box" style="display:none;"></div>
+
+      <div class="geo-layout">
+        <div class="geo-fields" id="geoFields"></div>
+        <div id="map"></div>
+      </div>
+    </div>
+
+    <!-- Local time card -->
+    <div class="card" id="tzCard" style="display:none;">
+      <div class="card-label">// Local Time at Target Location</div>
+      <div class="tz-list" id="tzList"></div>
+    </div>
+
+    <!-- OSINT links card -->
+    <div class="card">
+      <div class="card-label">// OSINT Footprint — Click to Investigate</div>
+      <div class="osint-grid" id="osintGrid"></div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    // LEGAL NOTICE: Educational use only — FUTMinna Cybersecurity coursework.<br>
+    // Only query numbers you own or have explicit written permission to investigate.<br>
+    // Unauthorised OSINT may violate the Nigerian Cybercrimes Act 2015 &amp; applicable laws.<br>
+    // Geolocation is approximate (country/region level). No data is logged or stored by this tool.<br>
+    // Map tiles © OpenStreetMap contributors. Geo data © OpenCage / restcountries.com.
+  </div>
+</div>
+
+<script>
+let leafletMap = null;
+let mapMarker  = null;
+
+async function runLookup() {
+  const phone       = document.getElementById('phoneInput').value.trim();
+  const apiKey      = document.getElementById('apiKey').value.trim();
+  const opencageKey = document.getElementById('opencageKey').value.trim();
+  const btn         = document.getElementById('lookupBtn');
+
+  hide('errorBox'); hide('results');
+  hide('geoCard'); hide('tzCard');
+  document.getElementById('spinner').style.display = 'block';
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch('/api/lookup', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ phone, api_key: apiKey, opencage_key: opencageKey }),
+    });
+
+    const data = await resp.json();
+    document.getElementById('spinner').style.display = 'none';
+    btn.disabled = false;
+
+    if (!resp.ok || data.error) {
+      showError('// ERROR: ' + (data.error || 'Unknown error'));
+      return;
+    }
+
+    renderResults(data);
+
+  } catch (e) {
+    document.getElementById('spinner').style.display = 'none';
+    btn.disabled = false;
+    showError('// ERROR: Could not reach server. Is Flask running?');
+  }
+}
+
+function renderResults(d) {
+  // ── Header badges ──
+  const vb = document.getElementById('validBadge');
+  vb.textContent = d.valid ? '✓ VALID' : '✗ INVALID';
+  vb.className   = 'badge ' + (d.valid ? 'badge-valid' : 'badge-invalid');
+
+  const lt = document.getElementById('liveTag');
+  if (d.live_valid !== null && d.live_valid !== undefined) {
+    lt.textContent = '⚡ LIVE';
+    lt.className   = 'badge badge-live';
+    lt.style.display = '';
+  } else { lt.style.display = 'none'; }
+
+  document.getElementById('phoneTitle').textContent = d.international || d.queried_number;
+  document.getElementById('timestamp').textContent  = d.timestamp;
+
+  // ── Live warn ──
+  const lw = document.getElementById('liveWarn');
+  if (d.live_error) {
+    lw.textContent = '// Live API: ' + d.live_error;
+    lw.style.display = '';
+  } else { lw.style.display = 'none'; }
+
+  // ── Formats ──
+  renderGrid('gridFormats', [
+    { key: 'International', val: d.international,        cls: 'hi-blue' },
+    { key: 'National',      val: d.national },
+    { key: 'E.164',         val: d.e164 },
+    { key: 'Local Format',  val: d.local_format || '—' },
+  ]);
+
+  // ── Identity ──
+  const isLive = (d.carrier_source || '').includes('live');
+  renderGrid('gridIdentity', [
+    { key: 'Country',      val: d.country,       cls: 'hi-green' },
+    { key: 'Country Code', val: d.country_code },
+    { key: 'ISO Code',     val: d.country_iso || '—' },
+    { key: 'Location',     val: d.location || '—' },
+    { key: 'Carrier',      val: d.carrier || '—', cls: 'hi-green',
+      sub: isLive ? '⚡ live (AbstractAPI)' : '📦 offline (libphonenumber)' },
+    { key: 'Line Type',    val: d.line_type || '—', cls: d.is_mobile ? 'hi-green' : '' },
+    { key: 'Mobile',       val: d.is_mobile ? 'Yes' : 'No' },
+  ]);
+
+  // ── Geolocation ──
+  const geo = d.geo || {};
+  if (geo.lat !== undefined && geo.lat !== null) {
+    renderGeo(geo, d.country_iso);
+    show('geoCard');
+
+    const gt = document.getElementById('geoTag');
+    gt.textContent = geo.source === 'OpenCage' ? '📍 GEO: OPENCAGE' : '📍 GEO: OPEN DATA';
+    gt.className   = 'badge badge-geo';
+    gt.style.display = '';
+  } else if (geo.error) {
+    const gw = document.getElementById('geoWarn');
+    gw.textContent = '// Geo: ' + geo.error;
+    gw.style.display = '';
+    show('geoCard');
+  }
+
+  // ── Local times ──
+  const tzList = document.getElementById('tzList');
+  if (d.local_times && d.local_times.length) {
+    tzList.innerHTML = d.local_times.map(t => `
+      <div class="tz-row">
+        <span class="tz-name">${t.tz}</span>
+        <span class="tz-date">${t.date}</span>
+        <span class="tz-time">${t.time} <span style="font-size:0.6rem;color:var(--muted)">${t.offset}</span></span>
+      </div>`).join('');
+    show('tzCard');
+  }
+
+  // ── OSINT links ──
+  document.getElementById('osintGrid').innerHTML = d.osint_links.map(l => `
+    <a class="osint-link" href="${l.url}" target="_blank" rel="noopener noreferrer">
+      <span class="osint-icon">${l.icon}</span>
+      <span class="osint-name">${l.platform}</span>
+    </a>`).join('');
+
+  show('results');
+}
+
+function renderGeo(geo, iso) {
+  const gf = document.getElementById('geoFields');
+
+  const rows = [
+    { key: 'Country',     val: (geo.flag ? geo.flag + ' ' : '') + (geo.country || '—'), cls: 'hi-purple' },
+    { key: 'State/Region',val: geo.state     || '—' },
+    { key: 'City/Area',   val: geo.city      || '—' },
+    { key: 'Continent',   val: geo.continent || '—' },
+    { key: 'Coordinates', val: geo.lat && geo.lng ? `${geo.lat.toFixed(4)}, ${geo.lng.toFixed(4)}` : '—', cls: 'hi-purple' },
+    { key: 'Currency',    val: geo.currency ? `${geo.currency} ${geo.currency_sym}` : '—' },
+    { key: 'Data Source', val: geo.source || '—' },
+  ];
+
+  gf.innerHTML = rows.map(r => `
+    <div class="field">
+      <div class="field-key">${r.key}</div>
+      <div class="field-val ${r.cls || ''}">${r.val}</div>
+    </div>`).join('');
+
+  // ── Leaflet map ──
+  const lat = geo.lat, lng = geo.lng;
+
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+    mapMarker  = null;
+  }
+
+  setTimeout(() => {
+    leafletMap = L.map('map', { zoomControl: true, attributionControl: false }).setView([lat, lng], 5);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+    }).addTo(leafletMap);
+
+    // Custom dark marker
+    const icon = L.divIcon({
+      html: `<div style="
+        width:14px;height:14px;
+        background:var(--accent);
+        border:2px solid #fff;
+        border-radius:50%;
+        box-shadow:0 0 10px var(--accent);
+      "></div>`,
+      iconSize: [14, 14],
+      iconAnchor: [7, 7],
+      className: '',
+    });
+
+    mapMarker = L.marker([lat, lng], { icon })
+      .addTo(leafletMap)
+      .bindPopup(`<b style="font-family:monospace;font-size:11px">${geo.formatted || 'Target Location'}</b>`)
+      .openPopup();
+
+    // Add accuracy circle
+    L.circle([lat, lng], {
+      radius: geo.source === 'OpenCage' ? 50000 : 300000,
+      color: 'rgba(0,200,248,0.4)',
+      fillColor: 'rgba(0,200,248,0.05)',
+      fillOpacity: 1,
+      weight: 1,
+    }).addTo(leafletMap);
+
+    leafletMap.invalidateSize();
+  }, 100);
+}
+
+function renderGrid(id, fields) {
+  document.getElementById(id).innerHTML = fields.map(f => `
+    <div class="field">
+      <div class="field-key">${f.key}</div>
+      <div class="field-val ${f.cls || ''}">${f.val || '—'}</div>
+      ${f.sub ? `<span class="source-tag">${f.sub}</span>` : ''}
+    </div>`).join('');
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = msg; b.style.display = 'block';
+}
+function show(id) { document.getElementById(id).style.display = 'block'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+document.getElementById('phoneInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') runLookup();
+});
+</script>
+</body>
+</html>
