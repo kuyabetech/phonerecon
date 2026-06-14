@@ -1,4 +1,5 @@
-# PhoneRecon — FUTMinna OSINT Tool
+# PhoneRecon — OSINT Tool
+**Developed By KVERIFY DIGITAL SOLUTIONS**
 **Educational Purposes Only | Cybersecurity Coursework**
 
 A combined offline + live phone number intelligence tool built with Flask.
